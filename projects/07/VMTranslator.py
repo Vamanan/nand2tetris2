@@ -21,7 +21,15 @@ POP_COMMAND_TYPE = "C_POP"
 
 # memory segments
 CONSTANT = "constant"
+LOCAL = "local"
+ARGUMENT = "argument"
+THIS = "this"
+THAT = "that"
+TEMP = "temp"
 
+TEMP_BASE_ADDRESS = 5
+
+SEGMENT_MAPPING = {LOCAL: "LCL", ARGUMENT: "ARG", THIS: "THIS", THAT: "THAT"}
 
 def get_output_file_path(input_file_path):
     dirname = os.path.dirname(input_file_path)
@@ -386,11 +394,111 @@ class CodeWriter(object):
         push_command = self._get_push_command("R13")
         self.assembly_file.write(push_command + "\n")
 
+    def _get_temp_push_command(self, offset):
+        commands = list()
+        # bring right value into memory
+        address = TEMP_BASE_ADDRESS + int(offset)
+        commands.append("@{}".format(address))
+        # store M in D
+        commands.append("D=M")
+        # write D to top of stack
+        commands.append("@SP")
+        commands.append("A=M")
+        commands.append("M=D")
+        # increment stack pointer
+        commands.append("@SP")
+        commands.append("M=M+1")
+        return '\n'.join(commands)
+
+    def _get_segment_push_command(self, segment, offset):
+        commands = list()
+        # store base address in D
+        commands.append("@{}".format(segment))
+        commands.append("D=M")
+        # set A to offset
+        commands.append("@{}".format(offset))
+        # set A to D + A
+        commands.append("A=D+A")
+        # store value in D
+        commands.append("D=M")
+        # set A to top of stack
+        commands.append("@{}".format("SP"))
+        commands.append("A=M")
+        # store D in top of stack
+        commands.append("M=D")
+        # increment stack pointer
+        commands.append("@{}".format("SP"))
+        commands.append("M=M+1")
+        return '\n'.join(commands)
+
+
     def _write_push_commands(self, arg1, arg2):
         if arg1 == CONSTANT:
             arg = arg2
             push_command = self._get_push_command(arg, constant=True)
-            self.assembly_file.write(push_command + "\n")
+        elif arg1 in SEGMENT_MAPPING:
+            segment = SEGMENT_MAPPING[arg1]
+            offset = arg2
+            push_command = self._get_segment_push_command(segment, offset)
+        elif arg1 == TEMP:
+            offset = arg2
+            push_command = self._get_temp_push_command(offset)
+        self.assembly_file.write(push_command + "\n")
+
+    def _get_temp_pop_command(self, offset):
+        commands = list()
+        # decrement stack pointer
+        commands.append("@SP")
+        commands.append("M=M-1")
+        # store top of stack in D
+        commands.append("A=M")
+        commands.append("D=M")
+        # store D in right address where base address is 5 and offset is given
+        address = TEMP_BASE_ADDRESS + int(offset)
+        commands.append("@{}".format(address))
+        commands.append("M=D")
+        return '\n'.join(commands)
+
+    def _get_segment_pop_command(self, segment, offset):
+        commands = list()
+        # store base address in D
+        commands.append("@{}".format(segment))
+        commands.append("D=M")
+        # store offset in A
+        commands.append("@{}".format(offset))
+        # set D to D+A
+        commands.append("D=D+A")
+        # store D in R13
+        commands.append("@{}".format("R13"))
+        commands.append("M=D")
+
+        # decrement stack pointer
+        commands.append("@SP")
+        commands.append("M=M-1")
+
+        # store top of stack in D
+        commands.append("@SP")
+        commands.append("A=M")
+        commands.append("D=M")
+
+        # set A to dest address
+        commands.append("@{}".format("R13"))
+        commands.append("A=M")
+        # write D to dest address
+        commands.append("M=D")
+        return '\n'.join(commands)
+
+    def _write_pop_commands(self, arg1, arg2):
+        # pop top of stack and store onto the right place in memory using arg1, arg2
+        if arg1 in SEGMENT_MAPPING:
+            offset = arg2
+            segment = SEGMENT_MAPPING[arg1]
+            pop_command = self._get_segment_pop_command(segment, offset)
+        elif arg1 == TEMP:
+            offset = arg2
+            pop_command = self._get_temp_pop_command(offset)
+
+        self.assembly_file.write(pop_command + "\n")
 
     def write_arithmetic(self, command):
         # this function converts an arithmetic command in vm code to assembly code
@@ -414,6 +522,8 @@ class CodeWriter(object):
         # self.assembly_file.write(command + " " + segment + " " + index + "\n")
         if command == PUSH_COMMAND_TYPE:
             self._write_push_commands(arg1, arg2)
+        elif command == POP_COMMAND_TYPE:
+            self._write_pop_commands(arg1, arg2)
 
     def write_comment(self, comment):
         self.assembly_file.write("// " + comment + "\n")
