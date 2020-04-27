@@ -26,6 +26,7 @@ ARGUMENT = "argument"
 THIS = "this"
 THAT = "that"
 TEMP = "temp"
+POINTER = "pointer"
 
 TEMP_BASE_ADDRESS = 5
 
@@ -431,6 +432,25 @@ class CodeWriter(object):
         commands.append("M=M+1")
         return '\n'.join(commands)
 
+    def _get_pointer_push_command(self, arg):
+        commands = list()
+        if arg == "0":
+            this_or_that = SEGMENT_MAPPING[THIS]
+        else:
+            this_or_that = SEGMENT_MAPPING[THAT]
+        # store base address of this/that pointer in D
+        commands.append("@{}".format(this_or_that))
+        commands.append("D=M")
+        # set A to top of stack
+        commands.append("@{}".format("SP"))
+        commands.append("A=M")
+        # store D in top of stack
+        commands.append("M=D")
+        # increment stack pointer
+        commands.append("@{}".format("SP"))
+        commands.append("M=M+1")
+        return '\n'.join(commands)
+
 
     def _write_push_commands(self, arg1, arg2):
         if arg1 == CONSTANT:
@@ -443,6 +463,9 @@ class CodeWriter(object):
         elif arg1 == TEMP:
             offset = arg2
             push_command = self._get_temp_push_command(offset)
+        elif arg1 == POINTER:
+            arg = arg2
+            push_command = self._get_pointer_push_command(arg)
         self.assembly_file.write(push_command + "\n")
 
     def _get_temp_pop_command(self, offset):
@@ -488,6 +511,24 @@ class CodeWriter(object):
         commands.append("M=D")
         return '\n'.join(commands)
 
+    def _get_pointer_pop_command(self, arg):
+        commands = list()
+        if arg == "0":
+            this_or_that = SEGMENT_MAPPING[THIS]
+        else:
+            this_or_that = SEGMENT_MAPPING[THAT]
+        # decrement stack pointer
+        commands.append("@SP")
+        commands.append("M=M-1")
+        # store top of stack in D
+        commands.append("A=M")
+        commands.append("D=M")
+        # set A to THIS/THAT
+        commands.append("@{}".format(this_or_that))
+        # set THIS/THAT base address to D
+        commands.append("M=D")
+        return '\n'.join(commands)
+
     def _write_pop_commands(self, arg1, arg2):
         # pop top of stack and store onto the right place in memory using arg1, arg2
         if arg1 in SEGMENT_MAPPING:
@@ -497,6 +538,9 @@ class CodeWriter(object):
         elif arg1 == TEMP:
             offset = arg2
             pop_command = self._get_temp_pop_command(offset)
+        elif arg1 == POINTER:
+            arg = arg2
+            pop_command = self._get_pointer_pop_command(arg)
 
         self.assembly_file.write(pop_command + "\n")
 
