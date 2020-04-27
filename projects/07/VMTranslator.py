@@ -27,10 +27,12 @@ THIS = "this"
 THAT = "that"
 TEMP = "temp"
 POINTER = "pointer"
+STATIC = "static"
 
 TEMP_BASE_ADDRESS = 5
 
 SEGMENT_MAPPING = {LOCAL: "LCL", ARGUMENT: "ARG", THIS: "THIS", THAT: "THAT"}
+
 
 def get_output_file_path(input_file_path):
     dirname = os.path.dirname(input_file_path)
@@ -39,6 +41,12 @@ def get_output_file_path(input_file_path):
     output_filename = filename + '.asm'
     output_file_path = os.path.join(dirname, output_filename)
     return output_file_path
+
+
+def get_filename_without_extension(input_file_path):
+    filename = os.path.basename(input_file_path)
+    filename, _ = os.path.splitext(filename)
+    return filename
 
 
 class Parser(object):
@@ -451,8 +459,25 @@ class CodeWriter(object):
         commands.append("M=M+1")
         return '\n'.join(commands)
 
+    def _get_static_push_command(self ,arg, filename):
+        commands = list()
+        variable_name = "{}.{}".format(filename, arg)
+        # set A to variable name
+        commands.append("@{}".format(variable_name))
+        # store value in D
+        commands.append("D=M")
+        # set A to top of stack
+        commands.append("@{}".format("SP"))
+        commands.append("A=M")
+        # store D in top of stack
+        commands.append("M=D")
+        # increment stack pointer
+        commands.append("@{}".format("SP"))
+        commands.append("M=M+1")
+        return '\n'.join(commands)
 
-    def _write_push_commands(self, arg1, arg2):
+
+    def _write_push_commands(self, arg1, arg2, filename):
         if arg1 == CONSTANT:
             arg = arg2
             push_command = self._get_push_command(arg, constant=True)
@@ -466,6 +491,10 @@ class CodeWriter(object):
         elif arg1 == POINTER:
             arg = arg2
             push_command = self._get_pointer_push_command(arg)
+        elif arg1 == STATIC:
+            arg = arg2
+            push_command = self._get_static_push_command(arg, filename)
+
         self.assembly_file.write(push_command + "\n")
 
     def _get_temp_pop_command(self, offset):
@@ -529,7 +558,22 @@ class CodeWriter(object):
         commands.append("M=D")
         return '\n'.join(commands)
 
-    def _write_pop_commands(self, arg1, arg2):
+    def _get_static_pop_command(self, arg, filename):
+        commands = list()
+        variable_name = "{}.{}".format(filename, arg)
+        # decrement stack pointer
+        commands.append("@SP")
+        commands.append("M=M-1")
+        # store top of stack in D
+        commands.append("A=M")
+        commands.append("D=M")
+        # set A to variable
+        commands.append("@{}".format(variable_name))
+        # set M to D
+        commands.append("M=D")
+        return '\n'.join(commands)
+
+    def _write_pop_commands(self, arg1, arg2, filename):
         # pop top of stack and store onto the right place in memory using arg1, arg2
         if arg1 in SEGMENT_MAPPING:
             offset = arg2
@@ -541,6 +585,9 @@ class CodeWriter(object):
         elif arg1 == POINTER:
             arg = arg2
             pop_command = self._get_pointer_pop_command(arg)
+        elif arg1 == STATIC:
+            arg = arg2
+            pop_command = self._get_static_pop_command(arg, filename)
 
         self.assembly_file.write(pop_command + "\n")
 
@@ -561,13 +608,12 @@ class CodeWriter(object):
         elif command == NOT:
             self._write_not_commands()
 
-
-    def write_push_pop(self, command, arg1, arg2):
+    def write_push_pop(self, command, arg1, arg2, filename):
         # self.assembly_file.write(command + " " + segment + " " + index + "\n")
         if command == PUSH_COMMAND_TYPE:
-            self._write_push_commands(arg1, arg2)
+            self._write_push_commands(arg1, arg2, filename)
         elif command == POP_COMMAND_TYPE:
-            self._write_pop_commands(arg1, arg2)
+            self._write_pop_commands(arg1, arg2, filename)
 
     def write_comment(self, comment):
         self.assembly_file.write("// " + comment + "\n")
@@ -581,6 +627,7 @@ def main(args):
     # create_file(input_file_path)
     parser = Parser(input_file_path)
     output_file_path = get_output_file_path(input_file_path)
+    filename = get_filename_without_extension(input_file_path)
     code_writer = CodeWriter(output_file_path)
     while parser.has_more_commands():
         parser.advance()
@@ -589,7 +636,7 @@ def main(args):
         arg1 = parser.arg1()
         if command_type in set(["C_PUSH", "C_POP"]):
             arg2 = parser.arg2()
-            code_writer.write_push_pop(command_type, arg1, arg2)
+            code_writer.write_push_pop(command_type, arg1, arg2, filename)
         else:
             code_writer.write_arithmetic(arg1)
     code_writer.close()
