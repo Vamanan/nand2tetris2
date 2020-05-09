@@ -13,11 +13,22 @@ OR = "or"
 NOT = "not"
 ARITHMETIC_OPERATIONS = set(["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"])
 PUSH_POP_OPERATIONS = set(["push", "pop"])
+LABEL_OPERATIONS = set(["label"])
+IF_OPERATIONS = set(["if-goto"])
+FUNCTION_OPERATIONS = set(["function"])
+RETURN_OPERATIONS = set(["return"])
+CALL_OPERATIONS = set(["call"])
 
 # command type
 ARITHMETIC_COMMAND_TYPE = "C_ARITHMETIC"
 PUSH_COMMAND_TYPE = "C_PUSH"
 POP_COMMAND_TYPE = "C_POP"
+LABEL_COMMAND_TYPE = "C_LABEL"
+GOTO_COMMAND_TYPE = "C_GOTO"
+IF_COMMAND_TYPE = "C_IF"
+FUNCTION_COMMAND_TYPE = "C_FUNCTION"
+RETURN_COMMAND_TYPE = "C_RETURN"
+CALL_COMMAND_TYPE = "C_CALL"
 
 # memory segments
 CONSTANT = "constant"
@@ -92,12 +103,22 @@ class Parser(object):
                 return PUSH_COMMAND_TYPE
             else:
                 return POP_COMMAND_TYPE
+        elif operation in LABEL_OPERATIONS:
+            return LABEL_COMMAND_TYPE
+        elif operation in IF_OPERATIONS:
+            return IF_COMMAND_TYPE
+        elif operation in FUNCTION_OPERATIONS:
+            return FUNCTION_COMMAND_TYPE
+        elif operation in RETURN_OPERATIONS:
+            return RETURN_COMMAND_TYPE
+        elif operation in CALL_OPERATIONS:
+            return CALL_COMMAND_TYPE
 
     def arg1(self):
         operation = self.current_command.split()[0]
         if operation in ARITHMETIC_OPERATIONS:
             return operation
-        elif operation in PUSH_POP_OPERATIONS:
+        else:
             operation, arg1, arg2 = self.current_command.split()[:3]
             return arg1
 
@@ -633,8 +654,9 @@ def main(args):
         parser.advance()
         code_writer.write_comment(parser.current_command)
         command_type = parser.command_type()
-        arg1 = parser.arg1()
-        if command_type in set(["C_PUSH", "C_POP"]):
+        if command_type != RETURN_COMMAND_TYPE:
+            arg1 = parser.arg1()
+        if command_type in set([PUSH_COMMAND_TYPE, POP_COMMAND_TYPE, FUNCTION_COMMAND_TYPE, CALL_COMMAND_TYPE]):
             arg2 = parser.arg2()
             code_writer.write_push_pop(command_type, arg1, arg2, filename)
         else:
