@@ -119,7 +119,8 @@ class Parser(object):
         if operation in ARITHMETIC_OPERATIONS:
             return operation
         else:
-            operation, arg1, arg2 = self.current_command.split()[:3]
+            components = self.current_command.split()[:3]
+            arg1 = components[1]
             return arg1
 
     def arg2(self):
@@ -594,6 +595,26 @@ class CodeWriter(object):
         commands.append("M=D")
         return '\n'.join(commands)
 
+    def _get_label_command(self, label):
+        commands = list()
+        label_command = "({label})".format(label=label)
+        commands.append(label_command)
+        return '\n'.join(commands)
+
+    def _get_if_command(self, label):
+        commands = list()
+        # decrement stack pointer
+        commands.append("@SP")
+        commands.append("M=M-1")
+        # store top of stack in D
+        commands.append("A=M")
+        commands.append("D=M")
+        # if D is not false jump to label
+        commands.append("@{}".format(label))
+        commands.append("!D;JNE")
+
+        return '\n'.join(commands)
+
     def _write_pop_commands(self, arg1, arg2, filename):
         # pop top of stack and store onto the right place in memory using arg1, arg2
         if arg1 in SEGMENT_MAPPING:
@@ -611,6 +632,14 @@ class CodeWriter(object):
             pop_command = self._get_static_pop_command(arg, filename)
 
         self.assembly_file.write(pop_command + "\n")
+
+    def _write_label_commands(self, label):
+        command = self._get_label_command(label)
+        self.assembly_file.write(command + "\n")
+
+    def _write_if_commands(self, label):
+        command = self._get_if_command(label)
+        self.assembly_file.write(command + "\n")
 
     def write_arithmetic(self, command):
         # this function converts an arithmetic command in vm code to assembly code
@@ -639,6 +668,12 @@ class CodeWriter(object):
     def write_comment(self, comment):
         self.assembly_file.write("// " + comment + "\n")
 
+    def write_label(self, label):
+        self._write_label_commands(label)
+
+    def write_if(self, label):
+        self._write_if_commands(label)
+
     def close(self):
         self.assembly_file.close()
 
@@ -656,11 +691,17 @@ def main(args):
         command_type = parser.command_type()
         if command_type != RETURN_COMMAND_TYPE:
             arg1 = parser.arg1()
+            if command_type == ARITHMETIC_COMMAND_TYPE:
+                code_writer.write_arithmetic(arg1)
+            elif command_type == LABEL_COMMAND_TYPE:
+                code_writer.write_label(arg1)
+            elif command_type == IF_COMMAND_TYPE:
+                code_writer.write_if(arg1)
+
         if command_type in set([PUSH_COMMAND_TYPE, POP_COMMAND_TYPE, FUNCTION_COMMAND_TYPE, CALL_COMMAND_TYPE]):
             arg2 = parser.arg2()
             code_writer.write_push_pop(command_type, arg1, arg2, filename)
-        else:
-            code_writer.write_arithmetic(arg1)
+
     code_writer.close()
 
 
