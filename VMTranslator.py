@@ -15,6 +15,7 @@ ARITHMETIC_OPERATIONS = set(["add", "sub", "neg", "eq", "gt", "lt", "and", "or",
 PUSH_POP_OPERATIONS = set(["push", "pop"])
 LABEL_OPERATIONS = set(["label"])
 IF_OPERATIONS = set(["if-goto"])
+GOTO_OPERATIONS = set(["goto"])
 FUNCTION_OPERATIONS = set(["function"])
 RETURN_OPERATIONS = set(["return"])
 CALL_OPERATIONS = set(["call"])
@@ -107,6 +108,8 @@ class Parser(object):
             return LABEL_COMMAND_TYPE
         elif operation in IF_OPERATIONS:
             return IF_COMMAND_TYPE
+        elif operation in GOTO_OPERATIONS:
+            return GOTO_COMMAND_TYPE
         elif operation in FUNCTION_OPERATIONS:
             return FUNCTION_COMMAND_TYPE
         elif operation in RETURN_OPERATIONS:
@@ -615,6 +618,12 @@ class CodeWriter(object):
 
         return '\n'.join(commands)
 
+    def _get_goto_command(self, label):
+        commands = list()
+        commands.append("@{label}".format(label=label))
+        commands.append("0;JMP")
+        return '\n'.join(commands)
+
     def _write_pop_commands(self, arg1, arg2, filename):
         # pop top of stack and store onto the right place in memory using arg1, arg2
         if arg1 in SEGMENT_MAPPING:
@@ -639,6 +648,10 @@ class CodeWriter(object):
 
     def _write_if_commands(self, label):
         command = self._get_if_command(label)
+        self.assembly_file.write(command + "\n")
+
+    def _write_goto_commands(self, label):
+        command = self._get_goto_command(label)
         self.assembly_file.write(command + "\n")
 
     def write_arithmetic(self, command):
@@ -674,6 +687,9 @@ class CodeWriter(object):
     def write_if(self, label):
         self._write_if_commands(label)
 
+    def write_goto(self, label):
+        self._write_goto_commands(label)
+
     def close(self):
         self.assembly_file.close()
 
@@ -697,6 +713,8 @@ def main(args):
                 code_writer.write_label(arg1)
             elif command_type == IF_COMMAND_TYPE:
                 code_writer.write_if(arg1)
+            elif command_type == GOTO_COMMAND_TYPE:
+                code_writer.write_goto(arg1)
 
         if command_type in set([PUSH_COMMAND_TYPE, POP_COMMAND_TYPE, FUNCTION_COMMAND_TYPE, CALL_COMMAND_TYPE]):
             arg2 = parser.arg2()
